@@ -18,19 +18,36 @@ module lsu_memory_handshake_demo (
     logic [31:0] address_q;
 
     assign op_ready_o       = (state_q == IDLE);
-    assign request_valid_o  = 1'b0;
+    assign request_valid_o  = (state_q == SEND_REQUEST);
     assign request_address_o = address_q;
-    assign response_ready_o = 1'b0;
-    assign op_done_o        = 1'b0;
+    assign response_ready_o = (state_q == WAIT_RESPONSE);
+    assign op_done_o        = response_valid_i && response_ready_o;
 
-    // TODO: capture a request, hold it through request_ready, then await response.
+    // A captured address stays stable while SEND_REQUEST is stalled.
     always_ff @(posedge clk_i or negedge rst_ni) begin
         if (!rst_ni) begin
             state_q   <= IDLE;
             address_q <= '0;
-        end else if (state_q == IDLE && op_valid_i) begin
-            address_q <= op_address_i;
-            state_q   <= SEND_REQUEST;
+        end else begin
+            case (state_q)
+                IDLE: begin
+                    if (op_valid_i && op_ready_o) begin
+                        address_q <= op_address_i;
+                        state_q   <= SEND_REQUEST;
+                    end
+                end
+                SEND_REQUEST: begin
+                    if (request_ready_i) begin
+                        state_q <= WAIT_RESPONSE;
+                    end
+                end
+                WAIT_RESPONSE: begin
+                    if (response_valid_i && response_ready_o) begin
+                        state_q <= IDLE;
+                    end
+                end
+                default: state_q <= IDLE;
+            endcase
         end
     end
 endmodule
